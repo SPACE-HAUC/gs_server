@@ -27,7 +27,13 @@
 
 int main(int argc, char *argv[])
 {
-    signal(SIGPIPE, SIG_IGN); // so that client does not die when server does
+    // Ignores broken pipe signal, which is sent to the calling process when writing to a nonexistent socket (
+    // see: https://www.linuxquestions.org/questions/programming-9/how-to-detect-broken-pipe-in-c-linux-292898/
+    // and 
+    // https://github.com/sunipkmukherjee/example_imgui_server_client/blob/master/guimain.cpp
+    // Allows manual handling of a broken pipe signal using 'if (errno == EPIPE) {...}'.
+    // Broken pipe signal will crash the process, and it caused by sending data to a closed socket.
+    signal(SIGPIPE, SIG_IGN);
 
     // Create global.
     global_data_t global[1] = {0};
