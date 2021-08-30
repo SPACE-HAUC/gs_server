@@ -25,6 +25,8 @@
 #include "gss.hpp"
 #include "meb_debug.hpp"
 
+NetPort ports[] = {NetPort::CLIENT, NetPort::ROOFUHF, NetPort::ROOFXBAND, NetPort::HAYSTACK, NetPort::TRACK};
+
 int main(int argc, char *argv[])
 {
     // Ignores broken pipe signal, which is sent to the calling process when writing to a nonexistent socket (
@@ -38,17 +40,28 @@ int main(int argc, char *argv[])
     // Create global.
     global_data_t global[1] = {0};
 
+    // Read password from .pass file.
+    char hash_pass[256] = {0};
+    FILE *fp = fopen("auth.pass", "r");
+    if (fp == NULL)
+    {
+        dbprintlf(FATAL "Failed to open auth.pass, does it exist?");
+        return -1;
+    }
+    fgets(hash_pass, sizeof(hash_pass), fp);
+    fclose(fp);
+
     // Create NUM_PORTS network_data objects with their corresponding ports.
     for (int i = 0; i < NUM_PORTS; i++)
     {
-        global->network_data[i] = new NetDataServer((NetPort)((int)NetPort::CLIENT + (10 * i)));
+        global->network_data[i] = new NetDataServer(ports[i], 10, sha1_hash_t(hash_pass, sizeof(hash_pass))); //new NetDataServer((NetPort)((int)NetPort::CLIENT + (10 * i)));
     }
 
     // Activate each thread's receive ability.
-    for (int i = 0; i < NUM_PORTS; i++)
-    {
-        global->network_data[i]->recv_active = true;
-    }
+    // for (int i = 0; i < NUM_PORTS; i++)
+    // {
+    //     global->network_data[i]->recv_active = true;
+    // }
 
     // Begin receiver threads.
     // 0:Client, 1:RoofUHF, 2: RoofXB, 3: Haystack, 4: Track

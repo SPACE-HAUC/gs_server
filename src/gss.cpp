@@ -87,214 +87,87 @@ void *gss_network_rx_thread(void *global_vp)
     // Makes my life easier.
     NetDataServer *network_data = global->network_data[t_index];
 
-    // Socket prep.
-    int listening_socket, socket_size;
-    struct sockaddr_in listening_address, accepted_address;
-    int buffer_size = sizeof(NetFrame) + 16;
-    unsigned char buffer[buffer_size + 1];
-    memset(buffer, 0x0, buffer_size);
-
-    // Create socket.
-    listening_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (listening_socket == -1)
+    while (network_data->Accepting())
     {
-        dbprintlf(FATAL "%sCould not create socket.", t_tag);
-        return NULL;
-    }
-    dbprintlf(GREEN_FG "%sSocket created.", t_tag);
+        uint8_t netstat = 0x0;
+        netstat |= 0x80 * (global->network_data[LF_CLIENT]->GetClient(NetVertex::CLIENT)->connection_ready);
+        netstat |= 0x40 * (global->network_data[LF_ROOF_UHF]->GetClient(NetVertex::ROOFUHF)->connection_ready);
+        netstat |= 0x20 * (global->network_data[LF_ROOF_XBAND]->GetClient(NetVertex::ROOFXBAND)->connection_ready);
+        netstat |= 0x10 * (global->network_data[LF_HAYSTACK]->GetClient(NetVertex::HAYSTACK)->connection_ready);
+        netstat |= 0x8 * (global->network_data[LF_TRACK]->GetClient(NetVertex::TRACK)->connection_ready);
 
-    listening_address.sin_family = AF_INET;
-    // Its fine to accept just any address.
-    listening_address.sin_addr.s_addr = INADDR_ANY;
-
-    // Calculate and set port.
-    network_data->listening_port = (int)NetPort::CLIENT + (10 * t_index);
-    listening_address.sin_port = htons(network_data->listening_port);
-
-    // Set the timeout for recv, which will allow us to reconnect to poorly disconnected clients.
-    struct timeval timeout;
-    timeout.tv_sec = LISTENING_SOCKET_TIMEOUT;
-    timeout.tv_usec = 0;
-    setsockopt(listening_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
-
-    // This allows us to crash the server, reboot, and still get all of our socket connections ready even thought theyre in a TIME_WAIT state.
-    int enable = 1;
-    setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
-
-    // Bind.
-    while (bind(listening_socket, (struct sockaddr *)&listening_address, sizeof(listening_address)) < 0)
-    {
-        dbprintlf(RED_FG "%sError: Port binding failed.", t_tag);
-        dbprintf(YELLOW_FG "%s>>> ", t_tag);
-        perror("bind");
-        sleep(5);
-    }
-    dbprintlf(GREEN_FG "%sBound to port %d.", t_tag, network_data->listening_port);
-
-    // Listen.
-    listen(listening_socket, 3);
-
-    while (network_data->recv_active)
-    {
-        int read_size = 0;
-
-        // Accept an incoming connection.
-        socket_size = sizeof(struct sockaddr_in);
-
-        // Accept connection from an incoming client.
-        network_data->socket = accept(listening_socket, (struct sockaddr *)&accepted_address, (socklen_t *)&socket_size);
-        if (network_data->socket < 0)
+        dbprintlf("%sNETSTAT %d %d %d %d %d (%d)", t_tag,
+                                  netstat & 0x80 ? 1 : 0,
+                                  netstat & 0x40 ? 1 : 0,
+                                  netstat & 0x20 ? 1 : 0,
+                                  netstat & 0x10 ? 1 : 0,
+                                  netstat & 0x8 ? 1 : 0, netstat);
+        
+        for (int i = 0; i < network_data->GetNumClients(); i++)
         {
-            if (errno == EAGAIN)
+            NetClient *client = network_data->GetClient(i);
+            if (client->connection_ready) // this client has active connection
             {
-                // Waiting for connection timed-out.
-                dbprintlf("%sTimed out (NETSTAT %d %d %d %d %d).", t_tag,
-                          global->network_data[LF_CLIENT]->connection_ready ? 1 : 0,
-                          global->network_data[LF_ROOF_UHF]->connection_ready ? 1 : 0,
-                          global->network_data[LF_ROOF_XBAND]->connection_ready ? 1 : 0,
-                          global->network_data[LF_HAYSTACK]->connection_ready ? 1 : 0,
-                          global->network_data[LF_TRACK]->connection_ready ? 1 : 0);
-                network_data->connection_ready = false;
-                continue;
-            }
-            else
-            {
-                dbprintlf(YELLOW_FG "%s>>> ", t_tag);
-                perror("accept failed");
-                continue;
-            }
-        }
-        dbprintlf(CYAN_FG "%sConnection accepted.", t_tag);
+                // receive data
+                NetFrame *netframe = new NetFrame();
+                int read_size = netframe->recvFrame(client);
 
-        // We are now connected.
-        network_data->connection_ready = true;
-
-        // Read from the socket.
-
-        while (read_size >= 0 && network_data->recv_active)
-        {
-            dbprintlf("%sBeginning recv... (last read: %d bytes of payload)", t_tag, read_size);
-
-            NetFrame *netframe = new NetFrame();
-            read_size = netframe->recvFrame(network_data);
-
-            if (read_size >= 0)
-            {
-                dbprintlf("Received the following NetFrame:");
-                netframe->print();
-
-                switch (netframe->getDestination())
+                // parse
+                if (read_size >= 0)
                 {
-                case NetVertex::SERVER:
-                {
-                    // Ride ends here, at the server.
-                    // NOTE: Parse and do something. maybe, we'll see.
-                    dbprintlf(CYAN_FG "Received a packet for the server from ID:%d!", t_index);
-                    if (netframe->getType() == NetType::POLL)
+                    dbprintlf("Received the following NetFrame:");
+                    netframe->print();
+
+                    if (netframe->getDestination() == NetVertex::SERVER)
                     {
-                        dbprintlf("Received a status polling packet, responding.");
+                        dbprintlf(BLUE_FG "Received a poll from %d.", (int)netframe->getOrigin());
 
-                        // Send the null frame to whomever asked for it.
                         NetFrame *netstat_frame = new NetFrame(NULL, 0, NetType::POLL, (NetVertex)t_index);
-
-                        uint8_t netstat = 0x0;
-                        netstat |= 0x80 * (global->network_data[LF_CLIENT]->connection_ready);
-                        netstat |= 0x40 * (global->network_data[LF_ROOF_UHF]->connection_ready);
-                        netstat |= 0x20 * (global->network_data[LF_ROOF_XBAND]->connection_ready);
-                        netstat |= 0x10 * (global->network_data[LF_HAYSTACK]->connection_ready);
-                        netstat |= 0x8 * (global->network_data[LF_TRACK]->connection_ready);
 
                         netstat_frame->setNetstat(netstat);
 
-                        dbprintlf("%sNETSTAT %d %d %d %d %d (%d)", t_tag,
-                                  global->network_data[LF_CLIENT]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_ROOF_UHF]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_ROOF_XBAND]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_HAYSTACK]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_TRACK]->connection_ready ? 1 : 0, netstat);
-
-                        // Transmit the clientserver_frame, sending the network_data for the connection down which we would like it to be sent.
-                        if (netstat_frame->sendFrame(global->network_data[t_index]) < 0)
-                        {
-                            dbprintlf(RED_FG "%sNetStat frame send to %d failed.", t_tag, t_index);
-                        }
+                        netstat_frame->sendFrame(client);
+                        delete netstat_frame;
                     }
                     else
                     {
-                        dbprintlf(RED_FG "%sFrame addressed to server but was not a polling status frame.", t_tag);
-                    }
-                    break;
-                }
-                case NetVertex::CLIENT:
-                case NetVertex::ROOFUHF:
-                case NetVertex::ROOFXBAND:
-                case NetVertex::HAYSTACK:
-                case NetVertex::TRACK:
-                {
-                    if (global->network_data[(int)netframe->getDestination()]->connection_ready)
-                    {
-                        dbprintlf("%sPassing along frame.", t_tag);
-                        uint8_t netstat = 0x0;
-                        netstat |= 0x80 * (global->network_data[LF_CLIENT]->connection_ready);
-                        netstat |= 0x40 * (global->network_data[LF_ROOF_UHF]->connection_ready);
-                        netstat |= 0x20 * (global->network_data[LF_ROOF_XBAND]->connection_ready);
-                        netstat |= 0x10 * (global->network_data[LF_HAYSTACK]->connection_ready);
-                        netstat |= 0x8 * (global->network_data[LF_TRACK]->connection_ready);
+                        dbprintlf(BLUE_FG "Received a packet from %d addressed to %d.", (int)netframe->getOrigin(), (int)netframe->getDestination());
 
-                        netframe->setNetstat(netstat);
-
-                        dbprintlf("%sNETSTAT %d %d %d %d %d", t_tag,
-                                  global->network_data[LF_CLIENT]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_ROOF_UHF]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_ROOF_XBAND]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_HAYSTACK]->connection_ready ? 1 : 0,
-                                  global->network_data[LF_TRACK]->connection_ready ? 1 : 0);
-
-                        // Transmit the NetFrame, sending the network_data for the connection down which we would like it to be sent.
-                        if (netframe->sendFrame(global->network_data[(int)netframe->getDestination()]) < 0)
+                        NetClient *destination = global->network_data[(int)netframe->getDestination()]->GetClient(netframe->getDestination());
+                        if (destination == nullptr)
                         {
-                            dbprintlf(RED_FG "%sSend failed (from %d to %d).", t_tag, (int)netframe->getOrigin(), (int)netframe->getDestination());
+                            dbprintlf(RED_FG "Could not find specified destination.");
+                        }
+                        else
+                        {
+                            netframe->sendFrame(destination);
+                            delete netframe;
                         }
                     }
-                    else
-                    {
-                        dbprintlf(RED_FG "%sCannot pass frame from ID:%d to ID:%d since the connection is not ready.", t_tag, (int)netframe->getOrigin(), (int)netframe->getDestination());
-                    }
-
-                    break;
                 }
-                default:
+                else if (read_size == -404)
                 {
-                    // Probably received nothing.
-                    break;
+                    dbprintlf("Connection to %d is dead", (int)client->self);
+                    client->Close(); // connection dead
                 }
+                else if (errno == EAGAIN)
+                {
+                    dbprintlf(YELLOW_BG "%sActive connection timed-out (%d).", t_tag, read_size);
+                    client->Close();
                 }
+                // send to destination
+                /*
+                1. Determine which server to send to
+                2. Create destination client: NetClient *dest = global->network_data[LF_DEST_CLIENT]->GetClient(NetVertex for that client type);
+                3. sendFrame(dest);
+                */
             }
-            else
-            {
-                break;
-            }
-
-            delete netframe;
-
-        }
-        if (read_size == -404)
-        {
-            dbprintlf(CYAN_BG "%sClient closed connection.", t_tag);
-            network_data->connection_ready = false;
-            continue;
-        }
-        else if (errno == EAGAIN)
-        {
-            dbprintlf(YELLOW_BG "%sActive connection timed-out (%d).", t_tag, read_size);
-            network_data->connection_ready = false;
-            continue;
         }
     }
 
-    if (!global->network_data[t_index]->recv_active)
+    if (!network_data->Accepting())
     {
-        dbprintlf(YELLOW_FG "%sReceive deactivated.", t_tag);
+        dbprintlf(YELLOW_FG "%sNetwork data no longer accepting.", t_tag);
     }
 
     return NULL;
