@@ -86,15 +86,15 @@ void *gss_network_rx_thread(void *global_vp)
 
     // Makes my life easier.
     NetDataServer *network_data = global->network_data[t_index];
-
+    
     while (network_data->Accepting())
     {
         uint8_t netstat = 0x0;
-        netstat |= 0x80 * (global->network_data[LF_CLIENT]->GetClient(NetVertex::CLIENT)->connection_ready);
-        netstat |= 0x40 * (global->network_data[LF_ROOF_UHF]->GetClient(NetVertex::ROOFUHF)->connection_ready);
-        netstat |= 0x20 * (global->network_data[LF_ROOF_XBAND]->GetClient(NetVertex::ROOFXBAND)->connection_ready);
-        netstat |= 0x10 * (global->network_data[LF_HAYSTACK]->GetClient(NetVertex::HAYSTACK)->connection_ready);
-        netstat |= 0x8 * (global->network_data[LF_TRACK]->GetClient(NetVertex::TRACK)->connection_ready);
+        netstat |= 0x80 * ({NetClient *client = global->network_data[LF_CLIENT]->GetClient(NetVertex::CLIENT); bool res = client == nullptr ? false : client->connection_ready; res;});
+        netstat |= 0x40 * ({NetClient *client = global->network_data[LF_ROOF_UHF]->GetClient(NetVertex::ROOFUHF); bool res = client == nullptr ? false : client->connection_ready; res;});
+        netstat |= 0x20 * ({NetClient *client = global->network_data[LF_ROOF_XBAND]->GetClient(NetVertex::ROOFXBAND); bool res = client == nullptr ? false : client->connection_ready; res;});
+        netstat |= 0x10 * ({NetClient *client = global->network_data[LF_HAYSTACK]->GetClient(NetVertex::HAYSTACK); bool res = client == nullptr ? false : client->connection_ready; res;});
+        netstat |= 0x8 * ({NetClient *client = global->network_data[LF_TRACK]->GetClient(NetVertex::TRACK); bool res = client == nullptr ? false : client->connection_ready; res;});
 
         dbprintlf("%sNETSTAT %d %d %d %d %d (%d)", t_tag,
                                   netstat & 0x80 ? 1 : 0,
@@ -102,13 +102,14 @@ void *gss_network_rx_thread(void *global_vp)
                                   netstat & 0x20 ? 1 : 0,
                                   netstat & 0x10 ? 1 : 0,
                                   netstat & 0x8 ? 1 : 0, netstat);
-        
+        bool conn_rdy = false;
         for (int i = 0; i < network_data->GetNumClients(); i++)
         {
             NetClient *client = network_data->GetClient(i);
             if (client->connection_ready) // this client has active connection
             {
                 // receive data
+                conn_rdy = true;
                 NetFrame *netframe = new NetFrame();
                 int read_size = netframe->recvFrame(client);
 
@@ -163,6 +164,8 @@ void *gss_network_rx_thread(void *global_vp)
                 */
             }
         }
+        if (!conn_rdy)
+            sleep(1);
     }
 
     if (!network_data->Accepting())
