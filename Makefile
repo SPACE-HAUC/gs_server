@@ -1,11 +1,10 @@
 CXX = g++
-COBJS = src/main.o src/gss.o network/network.o network/sha_digest.o
+COBJS = src/main.o src/gss.o network/network.o
 CXXFLAGS = -I ./include/ -I ./network/ -Wall -pthread -DGSNID=\"server\"
-EDLDFLAGS = -lpthread -lm -lssl -lcrypto
 TARGET = server.out
 
 all: $(COBJS)
-	$(CXX) $(CXXFLAGS) $(COBJS) -o $(TARGET) $(EDLDFLAGS)
+	$(CXX) $(CXXFLAGS) $(COBJS) -o $(TARGET)
 	./$(TARGET)
 
 %.o: %.c
