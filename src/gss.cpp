@@ -260,7 +260,22 @@ void *gss_network_rx_thread(void *global_vp)
                         FILE *log_num_fp = NULL;
                         FILE *log_fp = NULL;
 
-                        snprintf(log_num_name, 256, "log/t_index#%d/log_num.txt", t_index);
+                        snprintf(log_num_name, 256, "logs/t_index#%d/log_num.txt", t_index);
+
+                        if (access(log_num_name, F_OK) != 0)
+                        {
+                            log_num_fp = fopen(log_num_name, "w");
+                            if (log_num_fp == NULL)
+                            {
+                                dbprintlf(RED_FG "Failed to create log_num file.");
+                            }
+                            else
+                            {
+                                fprintf(log_num_fp, "0");
+                                fclose(log_num_fp);
+                            }
+                        }
+
                         log_num_fp = fopen(log_num_name, "r");
                         if (log_num_fp == NULL)
                         {
@@ -274,7 +289,7 @@ void *gss_network_rx_thread(void *global_vp)
                             fclose(log_num_fp);
                             log_num_fp = NULL;
 
-                            snprintf(log_name, 256, "log/t_index#%d/log#%d.txt", t_index, log_file_num);
+                            snprintf(log_name, 256, "logs/t_index#%d/log#%d.txt", t_index, log_file_num);
                             log_fp = fopen(log_name, "a");
                             if (log_fp == NULL)
                             {
