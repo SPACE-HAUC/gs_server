@@ -264,7 +264,7 @@ void *gss_network_rx_thread(void *global_vp)
                         log_num_fp = fopen(log_num_name, "r");
                         if (log_num_fp == NULL)
                         {
-                            dbprintlf(RED_FG "Failed to open log number file! Logging failed.");
+                            dbprintlf(RED_FG "Failed to open log number file (%s)! Logging failed.", log_num_name);
                         }
                         else
                         {
@@ -276,7 +276,7 @@ void *gss_network_rx_thread(void *global_vp)
                             log_fp = fopen(log_name, "a");
                             if (log_fp == NULL)
                             {
-                                dbprintlf(RED_FG "Failed to open log file! Logging failed.");
+                                dbprintlf(RED_FG "Failed to open log file (%s)! Logging failed.", log_name);
                             }
                             else
                             {
@@ -306,7 +306,7 @@ void *gss_network_rx_thread(void *global_vp)
                                 log_num_fp = fopen(log_num_name, "w");
                                 if (log_num_fp == NULL)
                                 {
-                                    dbprintlf(RED_FG "Failed to open log number file! Number updating failed.");
+                                    dbprintlf(RED_FG "Failed to open log number file (%s)! Number updating failed.", log_num_name);
                                 }
                                 else
                                 {
