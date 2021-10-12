@@ -270,6 +270,7 @@ void *gss_network_rx_thread(void *global_vp)
                         {
                             fscanf(log_num_fp, "%d", &log_file_num);
                             fscanf(log_num_fp, "%d", &log_entry_num);
+                            dbprintlf(GREEN_FG "Closing log_num_fp");
                             fclose(log_num_fp);
 
                             snprintf(log_name, 256, "log/t_index#%d/log#%d.txt", t_index, log_file_num);
@@ -301,6 +302,7 @@ void *gss_network_rx_thread(void *global_vp)
 
                                 fseek(log_fp, 0, SEEK_END);
                                 log_size = ftell(log_fp);
+                                dbprintlf(GREEN_FG "Closing log_fp");
                                 fclose(log_fp);
 
                                 log_num_fp = fopen(log_num_name, "w");
@@ -314,8 +316,9 @@ void *gss_network_rx_thread(void *global_vp)
                                     {
                                         log_file_num++;
                                     }
-
+                                    
                                     fprintf(log_num_fp, "%d %d", log_file_num, log_entry_num + 1);
+                                    dbprintlf(GREEN_FG "Closing log_num_fp");
                                     fclose(log_num_fp);
                                 }
                             }
