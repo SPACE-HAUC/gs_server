@@ -260,7 +260,7 @@ void *gss_network_rx_thread(void *global_vp)
                         FILE *log_num_fp = NULL;
                         FILE *log_fp = NULL;
 
-                        snprintf(log_num_name, 256, "logs/t_index#%d/log_num.txt", t_index);
+                        snprintf(log_num_name, 256, "log/t_index#%d/log_num.txt", t_index);
                         log_num_fp = fopen(log_num_name, "r");
                         if (log_num_fp == NULL)
                         {
@@ -272,7 +272,7 @@ void *gss_network_rx_thread(void *global_vp)
                             fscanf(log_num_fp, "%d", &log_entry_num);
                             fclose(log_num_fp);
 
-                            snprintf(log_name, 256, "logs/t_index#%d/log#%d.txt", t_index, log_file_num);
+                            snprintf(log_name, 256, "log/t_index#%d/log#%d.txt", t_index, log_file_num);
                             log_fp = fopen(log_name, "a");
                             if (log_fp == NULL)
                             {
