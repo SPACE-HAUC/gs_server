@@ -249,6 +249,79 @@ void *gss_network_rx_thread(void *global_vp)
                                   global->network_data[LF_ROOF_XBAND]->connection_ready ? 1 : 0,
                                   global->network_data[LF_HAYSTACK]->connection_ready ? 1 : 0,
                                   global->network_data[LF_TRACK]->connection_ready ? 1 : 0);
+                        
+                        ///
+                        // Log the data being sent and whether or not it was sent successfully.
+                        static int log_file_num = 0;
+                        static int log_entry_num = 0;
+                        static int log_size = 0;
+                        char log_num_name[256] = {0};
+                        char log_name[256] = {0};
+                        FILE *log_num_fp = NULL;
+                        FILE *log_fp = NULL;
+
+                        snprintf(log_num_name, 256, "logs/t_index#%d/log_num.txt", t_index);
+                        log_num_fp = fopen(log_num_name, "r");
+                        if (log_num_fp == NULL)
+                        {
+                            dbprintlf(RED_FG "Failed to open log number file! Logging failed.");
+                        }
+                        else
+                        {
+                            fscanf(log_num_fp, "%d", &log_file_num);
+                            fscanf(log_num_fp, "%d", &log_entry_num);
+                            fclose(log_num_fp);
+
+                            snprintf(log_name, 256, "logs/t_index#%d/log#%d.txt", t_index, log_file_num);
+                            log_fp = fopen(log_name, "a");
+                            if (log_fp == NULL)
+                            {
+                                dbprintlf(RED_FG "Failed to open log file! Logging failed.");
+                            }
+                            else
+                            {
+                                fprintf(log_fp, "__DATA LOG ENTRY #%d__\n", log_entry_num);
+                                fprintf(log_fp, "T_TAG %s", t_tag);
+                                fprintf(log_fp, "T_INDEX %d", t_index);
+                                fprintf(log_fp, "BEGIN PACKET INFO");
+                                fprintf(log_fp, "Type %d", (int)netframe->getType());
+                                fprintf(log_fp, "Origin %d", (int)netframe->getOrigin());
+                                fprintf(log_fp, "Destination %d", (int)netframe->getDestination());
+                                fprintf(log_fp, "Payload Size %d", netframe->getPayloadSize());
+                                fprintf(log_fp, "Frame Size %d", netframe->getFrameSize());
+                                fprintf(log_fp, "Netstat %d", netframe->getNetstat());
+                                fprintf(log_fp, "Payload (HEX)");
+                                for (int i = 0; i < netframe->getPayloadSize(); i++)
+                                {
+                                    fprintf(log_fp, "%02x", netframe[i]);
+                                }
+                                fprintf(log_fp, "\n");
+                                fprintf(log_fp, "END PACKET INFO");
+                                fprintf(log_fp, "__DATA LOG ENTRY END__");
+
+                                fseek(log_fp, 0, SEEK_END);
+                                log_size = ftell(log_fp);
+                                fclose(log_fp);
+
+                                log_num_fp = fopen(log_num_name, "w");
+                                if (log_num_fp == NULL)
+                                {
+                                    dbprintlf(RED_FG "Failed to open log number file! Number updating failed.");
+                                }
+                                else
+                                {
+                                    if (log_size > 256000000)
+                                    {
+                                        log_file_num++;
+                                    }
+
+                                    fprintf(log_num_fp, "%d %d", log_file_num, log_entry_num + 1);
+                                    fclose(log_num_fp);
+                                }
+                            }
+                        }
+
+                        ///
 
                         // Transmit the NetFrame, sending the network_data for the connection down which we would like it to be sent.
                         if (netframe->sendFrame(global->network_data[(int)netframe->getDestination()]) < 0)
